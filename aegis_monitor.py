@@ -225,6 +225,9 @@ def build_health_payload() -> dict[str, object]:
             "secure_enclave_vault": True,
             "cryogenic_scheduler": True,
             "reviewer_mode_metrics": True,
+            "reviewer_mode_panel": True,
+            "reviewer_mode_api_state": True,
+            "reviewer_mode_grounded_view": True,
             "snapshot_and_report_exports": True,
         },
     }
@@ -767,7 +770,22 @@ HTML = r"""<!doctype html>
     }
     .scopeitem strong { display: block; margin-bottom: 6px; }
     .scopeitem .check { color: var(--green); font-weight: 800; margin-right: 6px; }
+    .reviewerPanel {
+      display: none;
+      border-color: rgba(242, 184, 75, 0.55);
+      background: #201b12;
+    }
+    .reviewerPanel .metric { background: #17140f; }
+    .reviewerPanel .badge { background: var(--amber); }
+    .reviewerNote {
+      color: var(--muted);
+      border-left: 3px solid var(--amber);
+      padding-left: 10px;
+      margin-top: 10px;
+      line-height: 1.45;
+    }
     body.reviewer .visionary { display: none; }
+    body.reviewer .reviewerPanel { display: block; }
     body.reviewer h1::after { content: " - reviewer mode"; color: var(--amber); font-size: 13px; margin-left: 8px; }
     .controlPanel {
       display: grid;
@@ -824,6 +842,18 @@ HTML = r"""<!doctype html>
   </header>
   <main>
     <div id="status" class="footer">Loading monitor data...</div>
+    <section id="reviewerPanel" class="reviewerPanel">
+      <div class="toolbar">
+        <div>
+          <h2>Reviewer Mode: Grounded Metrics</h2>
+          <div class="sub">Visionary terminology is hidden. This panel reports signal-processing, distributed-systems, packet, and scheduler diagnostics only.</div>
+        </div>
+        <span id="reviewerState" class="badge">OFF</span>
+      </div>
+      <div class="grid top" id="reviewerMetrics" style="grid-template-columns: repeat(4, minmax(120px, 1fr));"></div>
+      <div id="reviewerDetail" class="stack"></div>
+      <div class="reviewerNote">Use this mode for skeptical technical review: RMSE phase skew, packet jitter, entropy bounds, latency, queue depth, lockhold latency, register slack, compression, UOP, and USR remain visible without product-language framing.</div>
+    </section>
     <section class="controlPanel">
       <div class="controlTile">
         <h2>Disruption Injection</h2>
@@ -1138,6 +1168,56 @@ function render(data) {
     <div>Shannon entropy bound: <b>${fmt(reviewer.shannon_entropy_bound_bits, 6)} bits</b></div>
     <div>compression: <b>${fmt(reviewer.data_compression_ratio, 2)}x</b></div>
     <div>latency bound: <b>${fmt(reviewer.packet_latency_bound_ms, 4)} ms</b></div>`;
+  renderReviewerPanel(last);
+}
+
+function renderReviewerPanel(result) {
+  const reviewerOn = el("reviewerMode").checked;
+  const state = el("reviewerState");
+  if (state) {
+    state.textContent = reviewerOn ? "ON" : "OFF";
+    state.style.background = reviewerOn ? "var(--amber)" : "var(--line)";
+    state.style.color = reviewerOn ? "var(--bg)" : "var(--fg)";
+  }
+  if (!result) {
+    el("reviewerMetrics").innerHTML = [
+      metric("Reviewer mode", reviewerOn ? "ON" : "OFF", "waiting for live or report data", reviewerOn ? "warn" : "info")
+    ].join("");
+    el("reviewerDetail").innerHTML = "<div>No runtime sample loaded yet.</div>";
+    return;
+  }
+  const mc = current ? current.monte_carlo : null;
+  const telemetry = result.reviewer_telemetry || {};
+  const slip = result.hardware_boundary_slippage || {};
+  const rtos = result.rtos_scheduler_diagnostics || {};
+  const qomBits = result.qom_compact_payload_bits || 176;
+  const uop = mc ? mc.unsafe_output_prevention_efficiency : null;
+  const usr = mc ? mc.unnecessary_shutdown_rate : null;
+  const slipStatus = slip.handoff_status || (Number(slip.delta_slack_ps || 0) <= 250 ? "LOCKED" : "SLIP_BREACH");
+  const rtosStatus = rtos.priority_inversion_damped ? "PRIORITY_INHERITANCE_ACTIVE" : "NORMAL";
+  const lockholdMs = Number(rtos.sre_lockhold_latency_us || 0) / 1000;
+  el("reviewerMetrics").innerHTML = [
+    metric("RMSE phase skew", `${fmt(telemetry.rmse_phase_skew_rad, 6)} rad`, "phase error residual", "info"),
+    metric("Packet jitter", `${fmt(telemetry.packet_transmission_jitter_ns, 6)} ns`, "transport timing variance", "info"),
+    metric("Entropy bound", `${fmt(telemetry.shannon_entropy_bound_bits, 6)} bits`, "Shannon information bound", "info"),
+    metric("Compression", `${fmt(telemetry.data_compression_ratio, 2)}x`, "storage footprint ratio", "ok"),
+    metric("Latency bound", `${fmt(telemetry.packet_latency_bound_ms, 4)} ms`, "packet processing ceiling", "info"),
+    metric("Register slack", `${fmt(slip.delta_slack_ps, 2)} ps`, `budget ${fmt(slip.slack_budget_ps, 2)} ps`, slipStatus === "LOCKED" ? "ok" : "bad"),
+    metric("Queue depth", rtos.thread_queue_depth ?? "N/A", "RTOS scheduler backlog", Number(rtos.thread_queue_depth || 0) <= 6 ? "ok" : "warn"),
+    metric("Lockhold latency", `${fmt(lockholdMs, 4)} ms`, rtosStatus, rtosStatus === "PRIORITY_INHERITANCE_ACTIVE" ? "warn" : "ok"),
+    metric("UOP efficiency", uop === null ? "N/A" : pct(uop), "unsafe-output prevention", uop === null ? "info" : cls(uop, .9949, .99)),
+    metric("USR", usr === null ? "N/A" : pct(usr), "unnecessary shutdown rate", usr === null ? "info" : (usr < .05 ? "ok" : "bad")),
+    metric(".QOM payload", `${qomBits} bits`, "compact metadata frame", "info"),
+    metric("Reviewer API", reviewerOn ? "ACTIVE" : "READY", "control state propagated", reviewerOn ? "ok" : "info")
+  ].join("");
+  el("reviewerDetail").innerHTML = `
+    <div>Scenario: <b>${result.scenario || result.live_scenario || "N/A"}</b></div>
+    <div>Governance states: <b>${(result.governance_states || []).join(" | ") || "NORMAL"}</b></div>
+    <div>Continuity gate: <b>${result.continuity_gate_passed ? "PASS" : "HOLD"}</b> | Integrity preserved: <b>${result.integrity_preserved ? "YES" : "NO"}</b></div>
+    <div>Register handoff status: <b class="${slipStatus === "LOCKED" ? "ok" : "bad"}">${slipStatus}</b></div>
+    <div>RTOS scheduler status: <b class="${rtosStatus === "PRIORITY_INHERITANCE_ACTIVE" ? "warn" : "ok"}">${rtosStatus}</b></div>
+    <div>Packet context hash: <span class="mono">${result.opte_policy_context_hash || "N/A"}</span></div>
+    <div>Lineage root: <span class="mono">${result.merkle_root || "N/A"}</span></div>`;
 }
 
 function renderCoverage(data) {
@@ -1246,6 +1326,7 @@ function renderLive(payload) {
       <div>Omega ${fmt(r.pulse_controls.omega_drive, 2)} | eta ${fmt(r.pulse_controls.innovation_eta, 2)} | ZNE ${fmt(r.pulse_controls.zne_lambda, 2)} | RB ${r.pulse_controls.rb_interleave}</div>
     </div>`;
   renderAdvancedLiveDiagnostics(r);
+  renderReviewerPanel(r);
   el("eventLog").innerHTML = liveHistory.slice().reverse().map(item => `
     <div class="event">
       <span class="mono">#${item.tick}</span>
@@ -1563,6 +1644,11 @@ function syncControlLabels() {
   document.body.classList.toggle("reviewer", reviewer);
   el("reviewerModeToggle").textContent = reviewer ? "Reviewer Mode: ON" : "Reviewer Mode: OFF";
   el("reviewerModeToggle").className = reviewer ? "primary" : "";
+  let latest = liveHistory.length ? liveHistory[liveHistory.length - 1] : null;
+  if (!latest && current && current.deterministic_suite && current.deterministic_suite.length) {
+    latest = current.deterministic_suite[current.deterministic_suite.length - 1];
+  }
+  if (el("reviewerMetrics")) renderReviewerPanel(latest);
 }
 
 async function pushControls() {
