@@ -154,7 +154,7 @@ Open:
 
 `http://127.0.0.1:8765`
 
-The monitor includes a Qiskit simulator ingestion panel with live QST-style overlap fidelity, `T1`/`T2` relaxation/dephasing readouts, Qiskit noise-scale controls, a QEM calibration toggle, and a `STATE_LEAKAGE_RECON` stress mode that reports leaked channel indices and Solve-for-X reconstruction score.
+The monitor includes a Qiskit simulator ingestion panel with live QST-style overlap fidelity, `T1`/`T2` relaxation/dephasing readouts, Qiskit noise-scale controls, a QEM calibration toggle, and a `STATE_LEAKAGE_RECON` stress mode that reports leaked channel indices and Solve-for-X reconstruction score. The panel also exposes `Run Qiskit Pass`, `Save Qiskit JSON`, `Export Qiskit JSON`, and `Import Qiskit JSON` controls so reviewers can generate a bridge artifact, persist it on the local server, download it, or reload a prior bridge run.
 
 Run automated regression tests:
 
@@ -207,6 +207,13 @@ The tests use plain Python assertions and are compatible with pytest:
 5. Emits normal AEGIS cycle outputs, including governance states, `.QOM` payload bits, and Merkle lineage.
 
 The bridge is intentionally optional so the core repository remains runnable with the Python standard library.
+
+When the live monitor is running, the Qiskit bridge is also exposed through local HTTP endpoints:
+
+- `POST /api/qiskit/run?cycles=6&shots=2048&seed=2026`: runs the optional Qiskit Aer bridge and writes `monitor_snapshots/qiskit_bridge_*.json`.
+- `GET /api/qiskit/latest`: returns the newest bridge or imported bridge artifact.
+- `GET /api/qiskit/export`: returns the current bridge artifact for dashboard download.
+- `POST /api/qiskit/import`: accepts a prior bridge JSON payload, stores it as `monitor_snapshots/qiskit_import_*.json`, and loads it into the monitor.
 
 ## Algorithmic Grounding
 

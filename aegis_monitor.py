@@ -29,6 +29,7 @@ from aegis_kernel import (
 
 WORKSPACE = Path(__file__).resolve().parent
 SNAPSHOT_DIR = WORKSPACE / "monitor_snapshots"
+LATEST_QISKIT_BRIDGE: dict[str, object] | None = None
 
 
 def build_monitor_payload(cycles: int = 1000, seed: int = 2026) -> dict[str, object]:
@@ -79,6 +80,49 @@ def write_json_artifact(prefix: str, payload: dict[str, object]) -> Path:
     path = SNAPSHOT_DIR / f"{prefix}_{stamp}.json"
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return path
+
+
+def run_qiskit_bridge_payload(cycles: int = 6, shots: int = 2048, seed: int = 2026) -> dict[str, object]:
+    from examples.qiskit_bridge import run_bridge
+
+    results = run_bridge(cycles=cycles, shots=shots, seed=seed)
+    return {
+        "artifact_type": "qiskit_bridge_run",
+        "generated_at_unix": time.time(),
+        "seed": seed,
+        "cycles": cycles,
+        "shots": shots,
+        "results": results,
+        "summary": {
+            "epochs": len(results),
+            "mean_q_conf": sum(float(item["q_conf"]) for item in results) / max(1, len(results)),
+            "gate_pass_count": sum(1 for item in results if item["continuity_gate_passed"]),
+            "qom_payload_bits": sorted({item["qom_compact_payload_bits"] for item in results}),
+            "final_merkle_root": results[-1]["merkle_root"] if results else None,
+        },
+    }
+
+
+def latest_qiskit_bridge_payload() -> dict[str, object] | None:
+    global LATEST_QISKIT_BRIDGE
+    if LATEST_QISKIT_BRIDGE is not None:
+        return LATEST_QISKIT_BRIDGE
+    SNAPSHOT_DIR.mkdir(exist_ok=True)
+    candidates = sorted(
+        list(SNAPSHOT_DIR.glob("qiskit_bridge_*.json")) + list(SNAPSHOT_DIR.glob("qiskit_import_*.json")),
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    )
+    if not candidates:
+        return None
+    try:
+        loaded = json.loads(candidates[0].read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if isinstance(loaded, dict):
+        LATEST_QISKIT_BRIDGE = loaded
+        return LATEST_QISKIT_BRIDGE
+    return None
 
 
 def json_bytes(payload: object) -> bytes:
@@ -160,6 +204,10 @@ def build_health_payload() -> dict[str, object]:
             "zne_lambda_slider": True,
             "qiskit_noise_scale_slider": True,
             "qem_calibration_toggle": True,
+            "run_qiskit_bridge_button": True,
+            "save_qiskit_bridge_json_button": True,
+            "export_qiskit_bridge_json_button": True,
+            "import_qiskit_bridge_json_button": True,
             "relativistic_compensation_toggle": True,
             "reviewer_mode_toggle": True,
             "start_live_button": True,
@@ -188,6 +236,10 @@ def build_health_payload() -> dict[str, object]:
             "forensic_birth_certificate": "/api/export/birth_certificate",
             "snapshot_json": "/api/snapshot",
             "full_report_json": "/api/report",
+            "qiskit_bridge_run": "/api/qiskit/run",
+            "qiskit_bridge_latest": "/api/qiskit/latest",
+            "qiskit_bridge_export": "/api/qiskit/export",
+            "qiskit_bridge_import": "/api/qiskit/import",
             "artifact_list": "/api/artifacts",
             "server_stop": "/api/stop",
             "health_check": "/api/health",
@@ -236,6 +288,7 @@ def build_health_payload() -> dict[str, object]:
             "qst_overlap_fidelity": True,
             "t1_t2_relaxation_tracking": True,
             "qem_calibration_controls": True,
+            "qiskit_bridge_run_save_import_export": True,
             "snapshot_and_report_exports": True,
         },
     }
@@ -1048,10 +1101,19 @@ HTML = r"""<!doctype html>
       <section>
         <div class="toolbar">
           <h2>Qiskit Simulator Ingestion</h2>
-          <span id="qiskitState" class="badge">WAITING</span>
+          <div class="actions">
+            <button id="runQiskit">Run Qiskit Pass</button>
+            <button id="saveQiskit">Save Qiskit JSON</button>
+            <button id="exportQiskit">Export Qiskit JSON</button>
+            <button id="importQiskit">Import Qiskit JSON</button>
+            <input id="qiskitImportFile" type="file" accept="application/json,.json" style="display:none">
+            <span id="qiskitState" class="badge">WAITING</span>
+          </div>
         </div>
+        <div class="sub" style="margin-bottom:10px">Runs the optional Qiskit Aer bridge, saves server artifacts, exports local JSON, and can import prior Qiskit bridge runs for review.</div>
         <div class="grid top" id="qiskitMetrics" style="grid-template-columns: repeat(4, minmax(120px, 1fr));"></div>
         <canvas id="qiskitGraph" width="900" height="220"></canvas>
+        <div id="qiskitArtifact" class="mono" style="margin-top:10px">No Qiskit bridge artifact loaded yet.</div>
       </section>
       <section>
         <h2>Quantum Leakage / QEM Detail</h2>
@@ -1156,6 +1218,7 @@ const el = (id) => document.getElementById(id);
 let current = null;
 let liveTimer = null;
 let liveHistory = [];
+let latestQiskitArtifact = null;
 
 function metric(label, value, hint, kind="") {
   return `<div class="metric"><div class="label">${label}</div><div class="value ${kind}">${value}</div><div class="hint">${hint || ""}</div></div>`;
@@ -1517,6 +1580,28 @@ function renderQuantumIngestion(r) {
     <div>coherent crosstalk: <b>${q.coherent_crosstalk_active}</b> | state leakage: <b>${q.state_leakage_active}</b></div>
     <div>leaked channel indices: <b>${(q.leaked_channel_indices || []).join(", ") || "-"}</b></div>
     <div>density trace: <b>${fmt(q.density_matrix_trace, 3)}</b> | proxy trace: <b>${fmt(q.proxy_density_trace, 3)}</b></div>`;
+  renderQiskitArtifactStatus();
+}
+
+function renderQiskitArtifactStatus() {
+  const target = el("qiskitArtifact");
+  if (!target) return;
+  if (!latestQiskitArtifact) {
+    target.textContent = "No Qiskit bridge artifact loaded yet.";
+    return;
+  }
+  const summary = latestQiskitArtifact.summary || {};
+  const generated = latestQiskitArtifact.generated_at_unix
+    ? new Date(latestQiskitArtifact.generated_at_unix * 1000).toLocaleString()
+    : "imported artifact";
+  target.textContent = [
+    `Qiskit artifact: ${latestQiskitArtifact.artifact_type || "qiskit_bridge_run"}`,
+    `generated=${generated}`,
+    `epochs=${summary.epochs ?? latestQiskitArtifact.cycles ?? "N/A"}`,
+    `mean_q_conf=${fmt(summary.mean_q_conf, 6)}`,
+    `gate_pass_count=${summary.gate_pass_count ?? "N/A"}`,
+    `final_merkle_root=${summary.final_merkle_root || "N/A"}`
+  ].join(" | ");
 }
 
 function drawLiveGraph() {
@@ -1720,6 +1805,7 @@ async function loadData() {
   el("status").textContent = "Refreshing monitor data...";
   const res = await fetch(`/api/data?${params()}`);
   render(await res.json());
+  await loadLatestQiskitArtifact();
   await loadArtifacts();
 }
 
@@ -1748,6 +1834,95 @@ async function createArtifact(kind) {
   el("artifact").textContent = `${kind.toUpperCase()} saved on server and downloaded: ${data.path}`;
   if (data.payload) render(data.payload);
   await loadArtifacts();
+}
+
+async function loadLatestQiskitArtifact() {
+  const res = await fetch("/api/qiskit/latest");
+  const data = await res.json();
+  latestQiskitArtifact = data.payload || null;
+  renderQiskitArtifactStatus();
+}
+
+async function runQiskitPass() {
+  const seed = Number(el("seed").value || 2026);
+  el("qiskitArtifact").textContent = "Running Qiskit Aer bridge and saving server artifact...";
+  const res = await fetch(`/api/qiskit/run?cycles=6&shots=2048&seed=${encodeURIComponent(seed)}`, { method: "POST" });
+  const data = await res.json();
+  if (data.status === "error") {
+    el("qiskitArtifact").textContent = `Qiskit bridge error: ${data.error}`;
+    return;
+  }
+  latestQiskitArtifact = data.payload || null;
+  if (latestQiskitArtifact) {
+    downloadBlob(`aegis_qiskit_bridge_${safeStamp()}.json`, JSON.stringify(latestQiskitArtifact, null, 2), "application/json");
+  }
+  el("artifact").textContent = `Qiskit bridge run saved on server and downloaded: ${data.path}`;
+  renderQiskitArtifactStatus();
+  await loadArtifacts();
+}
+
+async function saveQiskitJson() {
+  if (!latestQiskitArtifact) {
+    await loadLatestQiskitArtifact();
+  }
+  if (!latestQiskitArtifact) {
+    await runQiskitPass();
+    return;
+  }
+  const res = await fetch("/api/qiskit/import", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(latestQiskitArtifact)
+  });
+  const data = await res.json();
+  latestQiskitArtifact = data.payload || latestQiskitArtifact;
+  el("artifact").textContent = `Qiskit artifact saved on server: ${data.path}`;
+  renderQiskitArtifactStatus();
+  await loadArtifacts();
+}
+
+async function exportQiskitJson() {
+  let res = await fetch("/api/qiskit/export");
+  let data = await res.json();
+  if (!data.payload) {
+    await runQiskitPass();
+    return;
+  }
+  latestQiskitArtifact = data.payload;
+  downloadBlob(`aegis_qiskit_bridge_${safeStamp()}.json`, JSON.stringify(latestQiskitArtifact, null, 2), "application/json");
+  el("artifact").textContent = "Qiskit bridge JSON exported.";
+  renderQiskitArtifactStatus();
+}
+
+function importQiskitJson() {
+  el("qiskitImportFile").click();
+}
+
+async function handleQiskitImport(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    const res = await fetch("/api/qiskit/import", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.status === "error") {
+      el("qiskitArtifact").textContent = `Qiskit import error: ${data.error}`;
+      return;
+    }
+    latestQiskitArtifact = data.payload;
+    el("artifact").textContent = `Qiskit bridge JSON imported and saved: ${data.path}`;
+    renderQiskitArtifactStatus();
+    await loadArtifacts();
+  } catch (err) {
+    el("qiskitArtifact").textContent = `Qiskit import error: ${err.message}`;
+  } finally {
+    event.target.value = "";
+  }
 }
 
 async function loadArtifacts() {
@@ -1927,6 +2102,11 @@ el("exportQom").addEventListener("click", exportQomHex);
 el("birthCert").addEventListener("click", forensicCertificate);
 el("snapshot").addEventListener("click", () => createArtifact("snapshot"));
 el("report").addEventListener("click", () => createArtifact("report"));
+el("runQiskit").addEventListener("click", runQiskitPass);
+el("saveQiskit").addEventListener("click", saveQiskitJson);
+el("exportQiskit").addEventListener("click", exportQiskitJson);
+el("importQiskit").addEventListener("click", importQiskitJson);
+el("qiskitImportFile").addEventListener("change", handleQiskitImport);
 el("copySummary").addEventListener("click", async () => {
   await navigator.clipboard.writeText(summaryText());
   el("artifact").textContent = "Summary copied to clipboard.";
@@ -1984,6 +2164,17 @@ class MonitorHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/health":
             self.send_payload(json_bytes(build_health_payload()))
             return
+        if parsed.path in {"/api/qiskit/latest", "/api/qiskit/export"}:
+            payload = latest_qiskit_bridge_payload()
+            self.send_payload(
+                json_bytes(
+                    {
+                        "status": "ok" if payload else "no_qiskit_artifact",
+                        "payload": payload,
+                    }
+                )
+            )
+            return
         if parsed.path == "/api/export/qom":
             current = LIVE_RUNTIME.current_payload()
             self.send_payload(
@@ -2001,6 +2192,7 @@ class MonitorHandler(BaseHTTPRequestHandler):
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
     def do_POST(self) -> None:
+        global LATEST_QISKIT_BRIDGE
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
         cycles = int(query.get("cycles", ["1000"])[0])
@@ -2035,6 +2227,32 @@ class MonitorHandler(BaseHTTPRequestHandler):
             certificate = build_forensic_certificate(current or {})
             path = write_json_artifact("forensic_birth_certificate", certificate)
             self.send_payload(json_bytes({"path": str(path), "payload": certificate}))
+            return
+        if parsed.path == "/api/qiskit/run":
+            q_cycles = max(1, min(50, int(query.get("cycles", ["6"])[0])))
+            shots = max(128, min(8192, int(query.get("shots", ["2048"])[0])))
+            try:
+                payload = run_qiskit_bridge_payload(cycles=q_cycles, shots=shots, seed=seed)
+            except Exception as exc:
+                self.send_payload(json_bytes({"status": "error", "error": str(exc)}))
+                return
+            LATEST_QISKIT_BRIDGE = payload
+            path = write_json_artifact("qiskit_bridge", payload)
+            self.send_payload(json_bytes({"status": "ok", "path": str(path), "payload": payload}))
+            return
+        if parsed.path == "/api/qiskit/import":
+            try:
+                payload = self.read_json_body()
+                if not isinstance(payload, dict):
+                    raise ValueError("Imported Qiskit payload must be a JSON object.")
+                payload.setdefault("artifact_type", "qiskit_bridge_import")
+                payload["imported_at_unix"] = time.time()
+            except Exception as exc:
+                self.send_payload(json_bytes({"status": "error", "error": str(exc)}))
+                return
+            LATEST_QISKIT_BRIDGE = payload
+            path = write_json_artifact("qiskit_import", payload)
+            self.send_payload(json_bytes({"status": "ok", "path": str(path), "payload": payload}))
             return
         if parsed.path == "/api/stop":
             self.send_payload(json_bytes({"status": "stopping"}))
