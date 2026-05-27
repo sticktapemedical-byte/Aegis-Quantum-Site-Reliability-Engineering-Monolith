@@ -336,7 +336,7 @@ class LiveRuntime:
         return {
             "solar_flare": "storm",
             "spoof_attack": "attack",
-            "thermal_spike": "normal",
+            "thermal_spike": "storm",
             "crypto_jitter": "crypto_seal",
             "gps_denied_drift": "transient_drift",
             "holdover_decay_stress": "anchor_dispute",
@@ -385,7 +385,7 @@ class LiveRuntime:
 
         if disruption == "thermal_spike":
             for item in telemetry:
-                item.environment = EnvironmentVector(0.96, 0.42, 0.62, 0.28, 0.58)
+                item.environment = EnvironmentVector(0.96, 0.42, 0.62, 0.35, 0.58)
                 item.signal_mu = max(item.signal_mu, 0.92)
                 item.mission_priority = max(item.mission_priority, 0.86)
 
