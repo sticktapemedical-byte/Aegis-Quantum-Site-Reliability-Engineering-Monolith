@@ -78,6 +78,14 @@ Reviewer-mode terminal output:
 
 `python aegis_os.py --reviewer-mode`
 
+Equivalent reviewer-mode toggle:
+
+`python aegis_os.py --mode reviewer`
+
+Environment-variable reviewer toggle:
+
+`$env:AEGIS_REVIEWER_MODE="1"; python aegis_os.py`
+
 ### Run The Live Monitor
 
 From this repository folder:
@@ -104,6 +112,7 @@ The live monitor includes:
 - Anchor decay lambda control.
 - Innovation eta control.
 - Reviewer-mode toggle.
+- Header-level Reviewer Mode ON/OFF button.
 - RB calibration interleave toggle.
 - Relativistic timestamp compensation toggle.
 - Hard-abort reset.

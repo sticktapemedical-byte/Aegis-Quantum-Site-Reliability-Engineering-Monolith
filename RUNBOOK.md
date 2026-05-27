@@ -18,6 +18,14 @@ Reviewer mode:
 
 `python aegis_os.py --reviewer-mode`
 
+Equivalent reviewer mode:
+
+`python aegis_os.py --mode reviewer`
+
+Environment toggle:
+
+`$env:AEGIS_REVIEWER_MODE="1"; python aegis_os.py`
+
 ## Expected Outputs
 
 The monitor creates JSON artifacts in:
@@ -39,4 +47,3 @@ Current data endpoint:
 Live tick endpoint:
 
 `http://127.0.0.1:8765/api/live?seed=2026`
-

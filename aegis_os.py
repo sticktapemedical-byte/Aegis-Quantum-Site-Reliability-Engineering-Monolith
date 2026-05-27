@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -159,10 +160,21 @@ def main() -> None:
     parser.add_argument("--monte-carlo-cycles", type=int, default=1000)
     parser.add_argument("--output", type=Path, default=Path("aegis_os_report.json"))
     parser.add_argument("--reviewer-mode", action="store_true")
+    parser.add_argument(
+        "--mode",
+        choices=["standard", "reviewer"],
+        default=None,
+        help="Output mode. Equivalent to --reviewer-mode when set to reviewer.",
+    )
     args = parser.parse_args()
-    payload = run_master_suite(args.seed, args.monte_carlo_cycles, args.reviewer_mode)
+    reviewer_mode = (
+        args.reviewer_mode
+        or args.mode == "reviewer"
+        or os.environ.get("AEGIS_REVIEWER_MODE", "").lower() in {"1", "true", "yes", "on"}
+    )
+    payload = run_master_suite(args.seed, args.monte_carlo_cycles, reviewer_mode)
     args.output.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    if not args.reviewer_mode:
+    if not reviewer_mode:
         print(f"Report written: {args.output}")
 
 

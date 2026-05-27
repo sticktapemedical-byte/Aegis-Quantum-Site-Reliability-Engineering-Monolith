@@ -812,6 +812,7 @@ HTML = r"""<!doctype html>
       <button id="startLive" class="primary">Start Live</button>
       <button id="stopLive">Stop Live</button>
       <button id="refresh">Refresh</button>
+      <button id="reviewerModeToggle">Reviewer Mode: OFF</button>
       <button id="exportQom">Export .QOM Hex</button>
       <button id="birthCert">Forensic Certificate</button>
       <button id="snapshot">Create Snapshot JSON</button>
@@ -1558,7 +1559,10 @@ function syncControlLabels() {
   el("omegaVal").textContent = Number(el("omegaDrive").value).toFixed(2);
   el("etaVal").textContent = Number(el("innovationEta").value).toFixed(2);
   el("zneVal").textContent = Number(el("zneLambda").value).toFixed(2);
-  document.body.classList.toggle("reviewer", el("reviewerMode").checked);
+  const reviewer = el("reviewerMode").checked;
+  document.body.classList.toggle("reviewer", reviewer);
+  el("reviewerModeToggle").textContent = reviewer ? "Reviewer Mode: ON" : "Reviewer Mode: OFF";
+  el("reviewerModeToggle").className = reviewer ? "primary" : "";
 }
 
 async function pushControls() {
@@ -1570,6 +1574,11 @@ async function pushControls() {
   });
   const data = await res.json();
   el("overrideStatus").textContent = `Controls updated: ${data.control_state.disruption}`;
+}
+
+async function toggleReviewerMode() {
+  el("reviewerMode").checked = !el("reviewerMode").checked;
+  await pushControls();
 }
 
 async function resetHardAbort() {
@@ -1651,6 +1660,7 @@ el("startLive").addEventListener("click", startLive);
 el("stopLive").addEventListener("click", stopLive);
 el("resetLive").addEventListener("click", resetLive);
 el("refresh").addEventListener("click", loadData);
+el("reviewerModeToggle").addEventListener("click", toggleReviewerMode);
 ["disruption", "spoofPercent", "kpGain", "kdGain", "thetaBackaction", "anchorLambda", "omegaDrive", "innovationEta", "zneLambda", "reviewerMode", "rbInterleave", "relativisticComp"].forEach(id => {
   el(id).addEventListener("input", pushControls);
   el(id).addEventListener("change", pushControls);
