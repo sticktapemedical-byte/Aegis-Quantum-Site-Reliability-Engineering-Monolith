@@ -310,7 +310,11 @@ class AegisContinuityKernel:
             gate_mc_threshold,
             gate_q_threshold,
         )
-        if self.governance_mask & GovernanceState.CRYPTO_SEAL:
+        if self.governance_mask & (
+            GovernanceState.CRYPTO_SEAL
+            | GovernanceState.CIRCUIT_ABORT
+            | GovernanceState.HARD_ABORT
+        ):
             continuity_gate_passed = False
         raw_unsafe_output_risk = self.calculate_raw_unsafe_output_risk(
             telemetry_batch=telemetry_batch,
@@ -458,6 +462,14 @@ class AegisContinuityKernel:
         return projected
 
     def manifold_unwrap(self, projected_phases: dict[str, float]) -> dict[str, float]:
+        """Lift wrapped phase samples onto a continuous phase track.
+
+        This is the signal-processing core behind the project's "Riemann"
+        language. Operationally it is the standard wrapped-delta phase
+        unwrapping step used in PLL-style tracking loops and Itoh-style phase
+        unwrapping: only the incremental delta is wrapped into [-pi, pi), then
+        accumulated onto the prior unwrapped track.
+        """
         unwrapped = {}
         for node_id, projected_phase in projected_phases.items():
             entry = self.track_registry[node_id]
@@ -494,6 +506,11 @@ class AegisContinuityKernel:
         estimated_vectors: dict[str, list[float]],
         kappa_map: dict[str, KappaScores],
     ) -> tuple[list[float], bool, float, float, int]:
+        # Weighted Byzantine isolation is grounded in classical BFT assumptions:
+        # consensus must keep enough independent physical participants while
+        # filtering outliers by trust-weighted distance from a medoid reference.
+        # The implementation preserves a minimum physical node count in addition
+        # to trust weight, avoiding a single high-score node becoming a quorum.
         active_items = [
             (node_id, vector, kappa_map[node_id].active)
             for node_id, vector in estimated_vectors.items()
@@ -861,7 +878,10 @@ class AegisContinuityKernel:
             self.recovery_validation_remaining = self.config.recovery_validation_cycles
 
     def build_hardware_register_target(self, environment: EnvironmentVector) -> dict[str, object]:
-        gate_open = not bool(self.governance_mask & (GovernanceState.HARD_ABORT | GovernanceState.CIRCUIT_ABORT))
+        gate_open = not bool(
+            self.governance_mask
+            & (GovernanceState.HARD_ABORT | GovernanceState.CIRCUIT_ABORT | GovernanceState.CRYPTO_SEAL)
+        )
         timing_window_ns = max(20, int((self.config.epoch_seconds * 1_000_000_000) / 1024))
         return {
             "target": "FPGA_ASIC_REGISTER_ABSTRACTION",
@@ -879,7 +899,7 @@ class AegisContinuityKernel:
                 "0x0014": "CRYO_THERMAL_INDEX",
                 "0x0018": "ENCLAVE_MAILBOX",
             },
-            "verilog_stub": "always_ff @(posedge clk) gate_control <= !hard_abort && !circuit_abort;",
+            "verilog_stub": "always_ff @(posedge clk) gate_control <= !hard_abort && !circuit_abort && !crypto_seal;",
         }
 
     def build_secure_enclave_vault(self, block: LedgerBlock) -> dict[str, object]:
@@ -936,6 +956,10 @@ class AegisContinuityKernel:
         environment: EnvironmentVector,
         compact_qom_payload: bytes,
     ) -> dict[str, object]:
+        # The reported compression ratio models high-utility telemetry trimming:
+        # low-value floating-point tails and repeated sensor noise are discarded
+        # before archival. This is a lossy telemetry-compression model, not a
+        # claim of reversible physical-state compression.
         if telemetry_batch:
             phases = [item.raw_phase for item in telemetry_batch]
             phase_mean = statistics.fmean(phases)

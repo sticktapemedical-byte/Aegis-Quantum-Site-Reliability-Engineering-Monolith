@@ -118,8 +118,9 @@ These rules define how the simulated kernel handles edge cases where timing, mea
 Prerequisites:
 
 - Python 3.10 or newer recommended
-- No external Python dependencies
-- No package installation required
+- Core simulator and monitor: no external Python dependencies
+- Test runner: `pytest` recommended
+- Qiskit bridge example: optional `qiskit` and `qiskit-aer`
 
 Run the terminal simulation:
 
@@ -145,13 +146,63 @@ Open:
 
 `http://127.0.0.1:8765`
 
+Run automated regression tests:
+
+`python -m pip install pytest`
+
+`python -m pytest tests/`
+
+Run the optional Qiskit Aer bridge:
+
+`python examples/qiskit_bridge.py`
+
+If Qiskit is not installed, install the optional integration packages in a separate environment:
+
+`python -m pip install qiskit qiskit-aer`
+
 ## Repository File Map
 
+- `.github/FUNDING.yml`: external support link configuration.
+- `examples/qiskit_bridge.py`: optional Qiskit Aer bridge that maps noisy GHZ circuit counts into AEGIS telemetry inputs.
+- `tests/test_kernel.py`: pytest-compatible regression suite for crypto sealing, holdover aborts, and Riemann phase continuity.
 - `aegis_kernel.py`: core control-plane logic, mathematical registers, governance states, Monte Carlo metrics, `.QOM` frames, Merkle lineage, and multiplicative trust matrices.
 - `aegis_os.py`: terminal runner managing deterministic execution, report output, and reviewer-mode telemetry switches.
 - `aegis_monitor.py`: loopback HTTP server orchestrating the live diagnostic dashboard, stressor controls, exports, and health endpoints.
 - `README.md`: technical specification handbook and deployment guide.
-- `LICENSE`: PolyForm Noncommercial License 1.0.0.
+- `LICENSE`: MIT License.
+
+## Automated Testing
+
+The `tests/` suite verifies hard safety invariants:
+
+- Crypto invalidation: an induced key/signature slip sets `CRYPTO_SEAL`, drops the continuity gate, and closes the hardware register gate.
+- Holdover breach: an elapsed tracking window beyond the safe phase-error ceiling triggers `CIRCUIT_ABORT` and marks `HOLDOVER_BREACH`.
+- Riemann unwrap continuity: aggressive `[-pi, +pi)` branch-cut crossings remain continuous after wrapped-delta unwrapping, with acceleration variance below `8.09e-08`.
+
+The tests use plain Python assertions and are compatible with pytest:
+
+`python -m pytest tests/`
+
+## Qiskit Bridge
+
+`examples/qiskit_bridge.py` is an optional integration example for reviewers who want to see the control plane wrap around a standard quantum simulation framework. It:
+
+1. Builds a 4-qubit GHZ circuit.
+2. Runs it on a Qiskit Aer simulator with thermal relaxation and depolarizing noise.
+3. Converts noisy shot counts into expectation-value telemetry.
+4. Maps that telemetry into the AEGIS 5-variable environment grid and `NodeTelemetry` inputs.
+5. Emits normal AEGIS cycle outputs, including governance states, `.QOM` payload bits, and Merkle lineage.
+
+The bridge is intentionally optional so the core repository remains runnable with the Python standard library.
+
+## Algorithmic Grounding
+
+Several AEGIS terms are project-specific names for established engineering patterns:
+
+- **Meaning-based compression:** modeled as lossy high-utility telemetry filtering, where low-value floating-point tails and repeated sensor noise are truncated before archival. This follows common industrial telemetry compression and lossy signal-compression practice.
+- **Weighted Byzantine quorum isolation:** grounded in Byzantine fault-tolerant distributed systems. AEGIS keeps the `f < n/3` mindset, requires a minimum physical node count, and weights candidate vectors by trust before medoid/outlier filtering.
+- **Riemann manifold phase unwrapping:** implemented as wrapped-delta phase unwrapping: `wrap_pi(delta) = ((delta + pi) mod 2pi) - pi`, accumulated into a continuous track. This is aligned with PLL-style phase tracking and Itoh-style phase-unwrapping logic.
+- **Unsafe-output prevention efficiency:** a reliability metric over unsafe-output opportunities, not a claim that software removes physical noise. It measures how often the control plane prevents unsafe data from reaching the output or ledger.
 
 ## JSON Export Layout
 
@@ -171,6 +222,15 @@ Each live cycle result includes governance states, kappa vector mean, multiplica
 Suggested topics:
 
 `quantum-sre`, `site-reliability`, `control-plane`, `telemetry-simulation`, `fault-tolerance`, `distributed-systems`, `zero-trust`, `quantum-computing`, `sre`, `observability`, `monte-carlo-simulation`, `byzantine-fault-tolerance`, `error-mitigation`, `merkle-tree`, `cryptographic-ledger`, `python`, `standard-library`, `simulation-framework`, `reliability-engineering`, `hardware-observability`
+
+## References
+
+- Lamport, Shostak, and Pease, "The Byzantine Generals Problem," ACM Transactions on Programming Languages and Systems, 1982.
+- Pease, Shostak, and Lamport, "Reaching Agreement in the Presence of Faults," Journal of the ACM, 1980.
+- Itoh, "Analysis of the phase unwrapping algorithm," Applied Optics, 1982.
+- Best, "Phase-Locked Loops: Design, Simulation, and Applications."
+- Cover and Thomas, "Elements of Information Theory."
+- Qiskit and Qiskit Aer project documentation for circuit simulation and noise-model integration.
 
 ## Contact
 
