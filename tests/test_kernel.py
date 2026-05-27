@@ -15,6 +15,8 @@ from aegis_kernel import (  # noqa: E402
     GovernanceState,
     KernelConfig,
     build_nominal_telemetry,
+    normalize_vector,
+    vector_distance,
 )
 
 
@@ -69,3 +71,56 @@ def test_riemann_unwrap_continuity_across_branch_cut() -> None:
 
     assert all(abs(delta - 0.02) < 1e-12 for delta in deltas)
     assert accel_variance < 8.09e-8
+
+
+def test_byzantine_quorum_filtering_effectiveness() -> None:
+    """Synthetic poisoned-node trial showing weighted filtering beats raw centroiding."""
+    kernel = AegisContinuityKernel(seed=42)
+    reference = normalize_vector([0.7071, 0.0, 0.7071])
+    raw_errors = []
+    filtered_errors = []
+
+    for trial in range(100):
+        rng = random.Random(42 + trial)
+        vectors = []
+        for idx in range(12):
+            if idx in {2, 5, 7, 9}:
+                vector = normalize_vector([rng.uniform(-0.1, 0.1), 1.0, rng.uniform(-0.1, 0.1)])
+                weight = rng.uniform(0.08, 0.24)
+            else:
+                drift = rng.uniform(-0.08, 0.08)
+                vector = normalize_vector([reference[0] + drift, rng.uniform(-0.02, 0.02), reference[2] - drift])
+                weight = rng.uniform(0.78, 0.99)
+            vectors.append((f"node_{idx}", vector, weight))
+
+        raw_centroid = normalize_vector([statistics.fmean(item[1][axis] for item in vectors) for axis in range(3)])
+        filtered = [item for item in vectors if item[2] >= 0.35 and vector_distance(item[1], reference) <= 0.55]
+        filtered_centroid = kernel.weighted_average_vector(filtered) if filtered else reference
+        raw_errors.append(vector_distance(raw_centroid, reference))
+        filtered_errors.append(vector_distance(filtered_centroid, reference))
+
+    raw_mean = statistics.fmean(raw_errors)
+    filtered_mean = statistics.fmean(filtered_errors)
+    reduction = (raw_mean - filtered_mean) / max(1e-12, raw_mean)
+
+    assert filtered_mean < raw_mean
+    assert reduction > 0.80
+
+
+def test_unsafe_output_prevention_grounded() -> None:
+    """Governance should prevent most unsafe outputs in synthetic stress scenarios."""
+    rng = random.Random(99)
+    opportunities = 0
+    prevented = 0
+
+    for scenario in ["normal", "storm", "attack", "crypto_seal", "anchor_dispute", "phase_hold"]:
+        kernel = AegisContinuityKernel(seed=99)
+        for step in range(10):
+            telemetry = build_nominal_telemetry(kernel.config.node_count, rng, scenario)
+            result = kernel.execute_cycle(telemetry, scenario=f"{scenario}_step_{step}")
+            opportunities += int(result.unsafe_output_opportunity)
+            prevented += int(result.unsafe_output_prevented)
+
+    efficiency = prevented / max(1, opportunities)
+    assert opportunities > 0
+    assert efficiency > 0.85

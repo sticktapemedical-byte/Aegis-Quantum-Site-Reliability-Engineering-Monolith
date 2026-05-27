@@ -196,6 +196,18 @@ The tests use plain Python assertions and are compatible with pytest:
 
 `python -m pytest tests/`
 
+## Validation and Grounding
+
+This project is a simulation framework for Q-SRE governance behavior, not a claim of measured physical quantum hardware performance. See `VALIDATION.md` and `ASSUMPTIONS.md` for the current boundary between measured simulation results, theoretical projections, and non-modeled hardware behavior.
+
+Grounded checks include:
+
+- weighted Byzantine filtering against synthetic poisoned-node trials
+- wrapped-delta phase unwrapping across `[-pi, pi)` branch cuts
+- unsafe-output prevention across deterministic stress scenarios
+- Merkle/HMAC ledger integrity checks
+- `.QOM` compact payload bit-width validation
+
 ## Qiskit Bridge
 
 `examples/qiskit_bridge.py` is an optional integration example for reviewers who want to see the control plane wrap around a standard quantum simulation framework. It:

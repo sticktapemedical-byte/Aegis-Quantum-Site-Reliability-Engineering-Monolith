@@ -240,6 +240,8 @@ def build_health_payload() -> dict[str, object]:
             "import_qiskit_bridge_json_button": True,
             "relativistic_compensation_toggle": True,
             "reviewer_mode_toggle": True,
+            "theme_selector": True,
+            "scenario_macro_buttons": True,
             "start_live_button": True,
             "stop_live_button": True,
             "reset_live_kernel_button": True,
@@ -321,6 +323,10 @@ def build_health_payload() -> dict[str, object]:
             "qem_calibration_controls": True,
             "qiskit_bridge_run_save_import_export": True,
             "qiskit_independent_stop_control": True,
+            "theme_matrix": True,
+            "preset_disruption_macros": True,
+            "forensic_ticker": True,
+            "bloch_path_overlay": True,
             "snapshot_and_report_exports": True,
         },
     }
@@ -800,6 +806,36 @@ HTML = r"""<!doctype html>
       --red: #ff6961;
       --cyan: #47c7d8;
       --white: #ffffff;
+      --canvas-bg: #151515;
+      --header-bg: rgba(17, 17, 17, 0.95);
+    }
+    body.theme-lab {
+      --bg: #f5f7fa;
+      --panel: #ffffff;
+      --panel2: #eef2f6;
+      --line: #9aa7b4;
+      --text: #101418;
+      --muted: #42505c;
+      --green: #007f4f;
+      --amber: #9a6200;
+      --red: #bd2f2f;
+      --cyan: #006d88;
+      --canvas-bg: #ffffff;
+      --header-bg: rgba(245, 247, 250, 0.96);
+    }
+    body.theme-amber {
+      --bg: #100b03;
+      --panel: #1b1206;
+      --panel2: #251807;
+      --line: #6f4a12;
+      --text: #ffd88a;
+      --muted: #c89438;
+      --green: #ffbf46;
+      --amber: #ff9d00;
+      --red: #ff5e2f;
+      --cyan: #ffcc66;
+      --canvas-bg: #120c04;
+      --header-bg: rgba(16, 11, 3, 0.96);
     }
     * { box-sizing: border-box; }
     body {
@@ -812,7 +848,7 @@ HTML = r"""<!doctype html>
       position: sticky;
       top: 0;
       z-index: 10;
-      background: rgba(17, 17, 17, 0.95);
+      background: var(--header-bg);
       border-bottom: 1px solid var(--line);
       padding: 14px 20px;
       display: grid;
@@ -935,7 +971,7 @@ HTML = r"""<!doctype html>
       width: 100%;
       height: 220px;
       display: block;
-      background: #151515;
+      background: var(--canvas-bg);
       border: 1px solid var(--line);
       border-radius: 8px;
     }
@@ -945,6 +981,21 @@ HTML = r"""<!doctype html>
       border: 1px solid var(--line);
       border-radius: 8px;
     }
+    .forensicTicker {
+      max-height: 260px;
+      overflow: auto;
+      background: #0d0d0d;
+      color: var(--green);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      font-family: Consolas, ui-monospace, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    body.theme-lab .forensicTicker { background: #f8fafc; color: #174036; }
+    body.theme-amber .forensicTicker { background: #0f0902; color: #ffbf46; }
+    .tickerLine { white-space: pre-wrap; border-bottom: 1px solid rgba(128,128,128,.18); padding: 3px 0; }
     .event {
       display: grid;
       grid-template-columns: 58px 1fr auto;
@@ -1029,6 +1080,13 @@ HTML = r"""<!doctype html>
       <button id="report">Create Full Report JSON</button>
       <button id="copySummary">Copy Summary</button>
       <button id="downloadCurrent">Download Current JSON</button>
+      <label>Theme
+        <select id="themeSelect">
+          <option value="night">NIGHT_OPS</option>
+          <option value="lab">HIGH_CONTRAST_LAB</option>
+          <option value="amber">ENCLAVE_AMBER</option>
+        </select>
+      </label>
       <button id="stopServer" class="danger">Stop Server</button>
     </div>
   </header>
@@ -1070,6 +1128,11 @@ HTML = r"""<!doctype html>
         <label>Spoofed nodes <span id="spoofVal">33%</span>
           <input id="spoofPercent" type="range" min="0" max="75" step="1" value="33">
         </label>
+        <div class="actions" style="margin-top:8px">
+          <button id="macroSolar">TRIGGER_SOLAR_FLARE</button>
+          <button id="macroSideChannel">SIMULATE_SIDE_CHANNEL_ATTACK</button>
+          <button id="macroCryo">FORCE_CRYOGENIC_BOIL</button>
+        </div>
       </div>
       <div class="controlTile">
         <h2>Runtime Tuning</h2>
@@ -1136,6 +1199,8 @@ HTML = r"""<!doctype html>
         <canvas id="liveGraph" width="900" height="260"></canvas>
         <h3 style="margin-top:10px">Kappa Vector Topology</h3>
         <canvas id="kappaGraph" width="900" height="210"></canvas>
+        <h3 style="margin-top:10px">Proxy State Bloch Path</h3>
+        <canvas id="blochCanvas" width="900" height="260"></canvas>
       </section>
       <section>
         <div class="toolbar">
@@ -1212,6 +1277,13 @@ HTML = r"""<!doctype html>
         <div id="rtosDiag" class="stack"></div>
       </section>
     </div>
+    <section style="margin-top:14px">
+      <div class="toolbar">
+        <h2>Forensic Ticker</h2>
+        <span class="badge">LIVE LOG</span>
+      </div>
+      <div id="forensicTicker" class="forensicTicker"></div>
+    </section>
     <div class="grid top" id="metrics"></div>
     <div class="grid mid">
       <section>
@@ -1269,6 +1341,7 @@ let current = null;
 let liveTimer = null;
 let liveHistory = [];
 let latestQiskitArtifact = null;
+let forensicEvents = [];
 
 function metric(label, value, hint, kind="") {
   return `<div class="metric"><div class="label">${label}</div><div class="value ${kind}">${value}</div><div class="hint">${hint || ""}</div></div>`;
@@ -1520,6 +1593,45 @@ function renderCoverage(data) {
     </div>`).join("");
 }
 
+function timeStampMs() {
+  const now = new Date();
+  return now.toTimeString().slice(0, 8) + "." + String(now.getMilliseconds()).padStart(3, "0").slice(0, 2);
+}
+
+function pushForensicEvent(stage, message) {
+  forensicEvents.push(`[${timeStampMs()}] ${stage}: ${message}`);
+  forensicEvents = forensicEvents.slice(-120);
+}
+
+function buildForensicEvents(r) {
+  pushForensicEvent("INGEST_TELEMETRY", `scenario=${r.live_scenario}; risk=${fmt(r.raw_unsafe_output_risk, 3)}; q_conf=${fmt(r.q_conf, 4)}`);
+  if ((r.governance_states || []).includes("STORM_PROTECT")) {
+    pushForensicEvent("STATE_GOVERNOR", "STORM_PROTECT active; adaptive continuity thresholds engaged.");
+  }
+  if ((r.governance_states || []).includes("PHASE_HOLD")) {
+    pushForensicEvent("MANIFOLD_UNWRAP", "PHASE_HOLD active; fusion paused while hold certificate lineage continues.");
+  }
+  if ((r.governance_states || []).includes("ANCHOR_DISPUTE")) {
+    const anchor = r.trust_channels ? r.trust_channels.anchor : 0;
+    pushForensicEvent("ANCHOR_DISPUTE", `anchor trust=${fmt(anchor, 4)}; fail-closed checks active.`);
+  }
+  if ((r.governance_states || []).includes("CRYPTO_SEAL")) {
+    pushForensicEvent("VAULT_ENCLAVE", "CRYPTO_SEAL active; external writes locked and key lineage isolated.");
+  }
+  if ((r.governance_states || []).includes("CIRCUIT_ABORT") || (r.governance_states || []).includes("HARD_ABORT")) {
+    pushForensicEvent("CIRCUIT_BREAKER", `abort=${r.abort_tier}; causes=${(r.hard_abort_causes || []).join(", ") || "unspecified"}`);
+  }
+  if (r.quantum_ingestion_telemetry && r.quantum_ingestion_telemetry.state_leakage_active) {
+    pushForensicEvent("QISKIT_LEAKAGE", `lambda_leak=${fmt(r.control_state.qiskit_leakage_lambda, 2)}; channels=${(r.quantum_ingestion_telemetry.leaked_channel_indices || []).join(",") || "-"}`);
+  }
+}
+
+function renderForensicTicker() {
+  const target = el("forensicTicker");
+  if (!target) return;
+  target.innerHTML = forensicEvents.slice().reverse().map(line => `<div class="tickerLine">${line}</div>`).join("");
+}
+
 function renderLive(payload) {
   const r = payload.current;
   liveHistory = payload.recent || [];
@@ -1553,6 +1665,8 @@ function renderLive(payload) {
   renderAdvancedLiveDiagnostics(r);
   renderQuantumIngestion(r);
   renderReviewerPanel(r);
+  buildForensicEvents(r);
+  renderForensicTicker();
   el("eventLog").innerHTML = liveHistory.slice().reverse().map(item => `
     <div class="event">
       <span class="mono">#${item.tick}</span>
@@ -1561,6 +1675,7 @@ function renderLive(payload) {
     </div>`).join("");
   drawLiveGraph();
   drawKappaGraph();
+  drawBlochSphere();
   drawQiskitGraph();
   drawCryoGraph();
   renderUopLedger();
@@ -1721,6 +1836,59 @@ function drawKappaGraph() {
     ctx.fillStyle = color;
     ctx.fillText(name, 12 + si * 132, 16);
   });
+}
+
+function drawBlochSphere() {
+  const canvas = el("blochCanvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
+  const cx = w / 2;
+  const cy = h / 2;
+  const r = Math.min(w, h) * 0.38;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--canvas-bg") || "#151515";
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue("--line") || "#3a3a3a";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([6, 6]);
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, r, r * 0.28, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle = "#47c7d8";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx - r, cy);
+  ctx.lineTo(cx + r, cy);
+  ctx.moveTo(cx, cy - r);
+  ctx.lineTo(cx, cy + r);
+  ctx.stroke();
+  const data = liveHistory.slice(-72).map(item => item.fused_vector || [0, 0, 1]);
+  if (!data.length) return;
+  ctx.strokeStyle = "#36d17d";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  data.forEach((vec, idx) => {
+    const x = cx + Math.max(-1, Math.min(1, vec[0] || 0)) * r;
+    const y = cy - Math.max(-1, Math.min(1, vec[2] || 0)) * r;
+    if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  const last = data[data.length - 1];
+  const px = cx + Math.max(-1, Math.min(1, last[0] || 0)) * r;
+  const py = cy - Math.max(-1, Math.min(1, last[2] || 0)) * r;
+  ctx.fillStyle = "#f2b84b";
+  ctx.beginPath();
+  ctx.arc(px, py, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--text") || "#f4f4f4";
+  ctx.fillText("PSR fused vector path (x/z projection)", 14, 18);
+  ctx.fillText(`x=${fmt(last[0], 3)} y=${fmt(last[1], 3)} z=${fmt(last[2], 3)}`, 14, 38);
 }
 
 function drawQiskitGraph() {
@@ -2081,6 +2249,61 @@ async function pushControls() {
   el("overrideStatus").textContent = `Controls updated: ${data.control_state.disruption}`;
 }
 
+function applyTheme(value) {
+  document.body.classList.toggle("theme-lab", value === "lab");
+  document.body.classList.toggle("theme-amber", value === "amber");
+  localStorage.setItem("aegisTheme", value);
+  drawLiveGraph();
+  drawKappaGraph();
+  drawBlochSphere();
+  drawQiskitGraph();
+  drawCryoGraph();
+}
+
+async function applyMacro(kind) {
+  const macro = {
+    solar: {
+      disruption: "solar_flare",
+      qiskitNoise: 3.25,
+      qiskitLeakage: 0.10,
+      thetaBackaction: 0.32,
+      anchorLambda: 0.75,
+      qiskitXtalk: false,
+      qemCalibration: true
+    },
+    side: {
+      disruption: "crypto_seal_failover",
+      qiskitNoise: 2.10,
+      qiskitLeakage: 0.22,
+      thetaBackaction: 0.28,
+      anchorLambda: 1.05,
+      qiskitXtalk: true,
+      qemCalibration: true
+    },
+    cryo: {
+      disruption: "thermal_spike",
+      qiskitNoise: 4.20,
+      qiskitLeakage: 0.35,
+      thetaBackaction: 0.24,
+      anchorLambda: 1.20,
+      qiskitXtalk: true,
+      qemCalibration: false
+    }
+  }[kind];
+  if (!macro) return;
+  el("disruption").value = macro.disruption;
+  el("qiskitNoise").value = macro.qiskitNoise;
+  el("qiskitLeakage").value = macro.qiskitLeakage;
+  el("thetaBackaction").value = macro.thetaBackaction;
+  el("anchorLambda").value = macro.anchorLambda;
+  el("qiskitXtalk").checked = macro.qiskitXtalk;
+  el("qemCalibration").checked = macro.qemCalibration;
+  pushForensicEvent("MACRO", `Applied ${kind.toUpperCase()} preset: ${macro.disruption}`);
+  renderForensicTicker();
+  await pushControls();
+  await loadLive();
+}
+
 async function toggleReviewerMode() {
   el("reviewerMode").checked = !el("reviewerMode").checked;
   await pushControls();
@@ -2182,12 +2405,18 @@ el("saveQiskit").addEventListener("click", saveQiskitJson);
 el("exportQiskit").addEventListener("click", exportQiskitJson);
 el("importQiskit").addEventListener("click", importQiskitJson);
 el("qiskitImportFile").addEventListener("change", handleQiskitImport);
+el("themeSelect").addEventListener("change", () => applyTheme(el("themeSelect").value));
+el("macroSolar").addEventListener("click", () => applyMacro("solar"));
+el("macroSideChannel").addEventListener("click", () => applyMacro("side"));
+el("macroCryo").addEventListener("click", () => applyMacro("cryo"));
 el("copySummary").addEventListener("click", async () => {
   await navigator.clipboard.writeText(summaryText());
   el("artifact").textContent = "Summary copied to clipboard.";
 });
 el("downloadCurrent").addEventListener("click", downloadCurrent);
 el("stopServer").addEventListener("click", stopServer);
+el("themeSelect").value = localStorage.getItem("aegisTheme") || "night";
+applyTheme(el("themeSelect").value);
 syncControlLabels();
 refreshLiveBadge();
 loadData();
