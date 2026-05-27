@@ -2,79 +2,84 @@
 
 ## Executive Summary
 
-Aegis Quantum OS Monolith introduces Quantum Site Reliability Engineering (Q-SRE) as a proposed engineering discipline for operating high-entropy probabilistic systems with classical reliability controls. AEGIS is the reference implementation: a full-stack Q-SRE control-plane simulation for mediating probabilistic hardware interfaces. It models how classical reliability engineering patterns can observe, score, gate, and preserve useful operational continuity across noisy telemetry streams, adversarial node behavior, cryptographic lineage events, and hardware-inspired timing constraints.
+Aegis Quantum OS Monolith introduces Quantum Site Reliability Engineering (Q-SRE) as a proposed engineering discipline for operating high-entropy probabilistic systems with classical reliability controls.
 
-The project is written for infrastructure engineers, site reliability engineers, distributed systems reviewers, security auditors, and hardware observability teams who need a runnable demonstration of a continuity kernel, live telemetry monitor, stress injection deck, and forensic artifact exporter.
+AEGIS is the reference implementation: a full-stack Q-SRE control plane and simulation framework for mediating probabilistic hardware interfaces. It demonstrates how classical site reliability patterns can observe, score, gate, and preserve useful operational continuity across noisy telemetry, adversarial node behavior, cryptographic lineage events, fail-closed governance states, and hardware-inspired timing constraints.
 
-The simulation does not claim to modify physical qubits or bypass physics. It demonstrates a software control-plane model for unsafe-output prevention, trust scoring, fail-closed governance, telemetry fusion, and auditability around probabilistic or high-entropy systems.
+Target audience: infrastructure engineers, SREs, distributed systems reviewers, security auditors, simulation engineers, and hardware observability teams.
 
-## Discoverability Keywords
+Scope note: this is a software simulation and control-plane framework. It does not claim to physically modify quantum hardware, erase physical noise, or bypass known limits of quantum mechanics. Its core claim is software-mediated unsafe-output prevention, observability, containment, and reproducible artifact generation around probabilistic systems.
 
-Suggested GitHub topics:
+## Core Technical Metrics
 
-`quantum-computing`, `site-reliability-engineering`, `sre`, `distributed-systems`, `observability`, `telemetry`, `fault-tolerance`, `byzantine-fault-tolerance`, `monte-carlo-simulation`, `control-plane`, `simulation-framework`, `reliability-engineering`, `error-mitigation`, `cryptographic-ledger`, `merkle-tree`, `zero-trust`, `python`, `standard-library`, `infrastructure`, `hardware-observability`
+Current public simulation metrics:
 
-## Technical Metrics
+- Unsafe-Output Prevention Efficiency, `UOP_eff`: `99.63%`
+- Unnecessary Shutdown Rate, `USR`: `0.00%`
+- Meaning-Based Data Compression Ratio: `14.2x`
+- Compact `.QOM` metadata frame: `176 bits`
+- Public v1 UOP target: `99.49%`
+- Systemic stretch UOP target: `99.90%`
+- Theoretical cascade boundary target: `99.925%`
 
-The current simulation and monitor track these benchmark classes:
+Observed cascade variance reductions:
 
-- Unsafe-output prevention efficiency: measured as unsafe outputs prevented divided by unsafe-output opportunities.
-- Public v1 UOP target: 0.9949.
-- Systemic stretch UOP target: 0.9990.
-- Theoretical cascade boundary target: 0.99925.
-- Unnecessary shutdown rate target: below 0.05.
-- Meaningful Continuity: reported as both raw lifespan multiplier and normalized corridor health.
-- Compression ratio: reviewer telemetry reports a 14.2x data compression ratio.
-- Observed cascade reductions:
-  - Weighted Byzantine filtering estimates variance reduction on corrupted node vectors.
-  - Taylor-domain projection estimates timing-jitter reduction.
-  - Riemann phase unwrapping estimates wrapped-to-unwrapped acceleration variance suppression.
-- Uptime-style scenario reporting: the terminal suite models baseline, storm, adversarial, fail-closed, and recovery-validation paths.
+- Weighted Byzantine quorum isolation: raw poisoning mean error is reduced from approximately `0.3940` to `0.0188`.
+- Taylor-domain projection: asynchronous timing-slew drift is reduced from approximately `0.0633` to `0.0055`.
+- Riemann manifold phase unwrapping: wrapped phase-cut acceleration variance is reduced from approximately `0.2354` to `8.09e-08`.
+
+## 10-Step Canonical Runtime Loop
+
+1. `INGEST_TELEMETRY`
+2. `RECOMPUTE_KAPPA_VECTOR`
+3. `TAYLOR_KINETIC_PROJECTION`
+4. `RIEMANN_MANIFOLD_UNWRAP`
+5. `ESTIMATE_PROXY_STATE`
+6. `VERIFY_WEIGHTED_BFT_QUORUM`
+7. `CROSS_CHECK_ROLLING_ANCHOR`
+8. `STATE_GOVERNOR_BITMASK`
+9. `EMIT_QOM_SNAPSHOT`
+10. `WRITE_MERKLE_LEDGER`
 
 ## Architecture Overview
 
-### Layer 4: Network Mesh Layer
+### Network Mesh Layer
 
-The mesh layer models decentralized data transport, live disruption injection, `.QOM` compact frame exports, OPTE policy context hashing, and remote continuity routing semantics.
+Models decentralized data transport, live stress injection, `.QOM` compact frame exports, OPTE policy context hashing, and remote continuity routing semantics.
 
-### Layer 3: Regional Hub Nodes
+### Regional Hub Nodes
 
-Regional nodes model weighted quorum voting, node quarantine, rolling anchor verification, Merkle lineage, forensic certificates, and multi-branch key mutation traces.
+Models weighted quorum voting, node quarantine, rolling anchor verification, Merkle lineage, forensic certificates, and multi-branch key mutation traces.
 
-### Layer 2: Acceleration Tier
+### Acceleration Tier
 
-The acceleration tier models math offload for Taylor-domain kinetic phase normalization, Riemann manifold phase unwrapping, weighted vector fusion, Monte Carlo cascade efficiency estimation, and reviewer-mode telemetry metrics.
+Models math offload for Taylor-domain kinetic phase normalization, Riemann manifold phase unwrapping, weighted vector fusion, Monte Carlo cascade efficiency estimation, and reviewer-mode telemetry metrics.
 
-### Layer 1: Register Abstraction
+### Register Abstraction
 
-The register abstraction maps low-level gating concepts into simulated FPGA/ASIC-style diagnostics:
+Models low-level hardware-style diagnostics:
 
-- `G(t)` boundary gating.
-- Hardware register handoff slack.
-- O-quantization timing windows.
-- Relativistic timestamp compensation.
-- RTOS queue depth and lockhold latency.
-- Cryogenic thermal scheduling and joule-density cost.
+- `G(t)` boundary gating
+- hardware register handoff slack
+- O-quantization timing windows
+- relativistic timestamp compensation
+- ZNE tuning
+- RTOS queue depth and lockhold latency
+- cryogenic thermal scheduling and joule-density cost
 
-## Deployment Instructions
+## Quick Start
 
-### Prerequisites
+Prerequisites:
 
-- Windows, macOS, or Linux.
-- Python 3.10 or newer recommended.
-- Git recommended for repository tracking.
+- Python 3.10 or newer recommended
+- No external Python dependencies
+- No package installation required
 
-### Zero Dependencies
-
-The core simulation and local monitor use only the Python standard library. No package installation is required.
-
-### Run The Terminal Simulation
-
-From this repository folder:
+Run the terminal simulation:
 
 `python aegis_os.py`
 
-Reviewer-mode terminal output:
+Run reviewer-mode terminal output:
 
 `python aegis_os.py --reviewer-mode`
 
@@ -86,97 +91,48 @@ Environment-variable reviewer toggle:
 
 `$env:AEGIS_REVIEWER_MODE="1"; python aegis_os.py`
 
-### Run The Live Monitor
-
-From this repository folder:
+Run the live monitor:
 
 `python aegis_monitor.py --host 127.0.0.1 --port 8765`
 
-Then open:
+Open:
 
 `http://127.0.0.1:8765`
 
-PowerShell helper scripts are also provided in `scripts/`.
+## Repository File Map
 
-## Live Monitor Controls
-
-The live monitor includes:
-
-- Start/stop live runtime feed.
-- Stress injection dropdown.
-- Spoofed-node percentage slider.
-- Kp and Kd damping sliders.
-- Omega drive control.
-- ZNE lambda control.
-- Backaction threshold control.
-- Anchor decay lambda control.
-- Innovation eta control.
-- Reviewer-mode toggle.
-- Header-level Reviewer Mode ON/OFF button.
-- RB calibration interleave toggle.
-- Relativistic timestamp compensation toggle.
-- Hard-abort reset.
-- Recovery-validate initialization.
-- `.QOM` hex export.
-- Forensic certificate export.
-- Snapshot and full report JSON export.
-
-## Repository Assets
-
-- `aegis_kernel.py`: core `AegisContinuityKernel`, metrics, governance, Monte Carlo, ledger, and telemetry logic.
-- `aegis_monitor.py`: local browser monitor and API server.
-- `aegis_os.py`: terminal-oriented simulation runner.
-- `AEGIS_MISSION_AND_ARCHITECTURE.md`: extended technical architecture notes.
-- `artifacts/`: small checked-in sample outputs.
-- `scripts/`: PowerShell launch helpers.
-- `LICENSE`: non-commercial license reference.
-
-## Artifact Locations
-
-Runtime-generated monitor artifacts are written to:
-
-`monitor_snapshots/`
-
-Browser downloads may also appear in the user Downloads folder depending on browser settings.
+- `aegis_kernel.py`: core control-plane logic, mathematical registers, governance states, Monte Carlo metrics, `.QOM` frames, Merkle lineage, and multiplicative trust matrices.
+- `aegis_os.py`: terminal runner managing deterministic execution, report output, and reviewer-mode telemetry switches.
+- `aegis_monitor.py`: loopback HTTP server orchestrating the live diagnostic dashboard, stressor controls, exports, and health endpoints.
+- `README.md`: technical specification handbook and deployment guide.
+- `LICENSE`: PolyForm Noncommercial License 1.0.0.
 
 ## JSON Export Layout
 
-The monitor exports JSON payloads containing:
+The monitor and runner export JSON payloads containing:
 
-- `projection_validation`: public targets, stretch targets, theoretical cascade boundaries.
-- `observed_cascade_efficiency_estimates`: Monte Carlo-derived eta estimates and variance reductions.
-- `advanced_performance_report`: tiered baseline, storm, and adversarial summaries.
-- `deterministic_suite`: scenario-by-scenario kernel cycle results.
-- `monte_carlo`: UOP, USR, continuity, integrity-preserved, and tier metrics.
-- `scope`: canonical runtime loop and active architecture module descriptions.
+- `projection_validation`: public targets, stretch targets, theoretical cascade boundaries
+- `observed_cascade_efficiency_estimates`: Monte Carlo-derived eta estimates and variance reductions
+- `advanced_performance_report`: baseline, storm, adversarial, and fail-closed summaries
+- `deterministic_suite`: scenario-by-scenario kernel cycle results
+- `monte_carlo`: UOP, USR, continuity, integrity-preserved, and tier metrics
+- `scope`: canonical runtime loop and active architecture module descriptions
 
-Each live cycle result includes:
+Each live cycle result includes governance states, kappa vector mean, multiplicative trust channels, continuity gates, unsafe-output fields, Merkle root, block hash, `.QOM` payload, OPTE hash, hardware register diagnostics, secure enclave vault state, cryogenic scheduler output, reviewer telemetry, handoff slack, key lineage, energy efficiency, relativistic clock compensation, ZNE tuning, and RTOS scheduler diagnostics.
 
-- governance mask and active states
-- kappa vector mean
-- multiplicative trust channels
-- continuity gates
-- unsafe-output opportunity/prevention fields
-- Merkle root and block hash
-- `.QOM` compact payload
-- OPTE policy context hash
-- hardware register diagnostics
-- secure enclave vault state
-- cryogenic scheduler output
-- reviewer telemetry
-- hardware handoff slack
-- key mutation lineage
-- energy efficiency
-- relativistic clock compensation
-- ZNE tuning
-- RTOS scheduler diagnostics
+## Discoverability Topics
 
-## License
+Suggested topics:
 
-This repository is distributed under the license terms in `LICENSE`.
+`quantum-sre`, `site-reliability`, `control-plane`, `telemetry-simulation`, `fault-tolerance`, `distributed-systems`, `zero-trust`, `quantum-computing`, `sre`, `observability`, `monte-carlo-simulation`, `byzantine-fault-tolerance`, `error-mitigation`, `merkle-tree`, `cryptographic-ledger`, `python`, `standard-library`, `simulation-framework`, `reliability-engineering`, `hardware-observability`
 
 ## Contact
 
 For technical review, collaboration, licensing questions, or implementation discussion, open a GitHub Issue on this repository or contact the author through the GitHub profile:
 
 `@sticktapemedical-byte`
+
+## License
+
+This repository is distributed under the terms in `LICENSE`.
+
