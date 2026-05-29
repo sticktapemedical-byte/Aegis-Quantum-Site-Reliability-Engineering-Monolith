@@ -1,0 +1,9 @@
+{
+  "accepted_artifact_count": 15,
+  "artifact_count": 16,
+  "claim_boundary": "Resource accounting over validation artifacts; not refrigerator power measurement.",
+  "mean_accepted_ghz": 0.946826171875,
+  "shots_per_accepted_artifact": 1732.2666666666667,
+  "source": "aegis_efficiency_summary",
+  "total_tracked_shots": 25984
+}

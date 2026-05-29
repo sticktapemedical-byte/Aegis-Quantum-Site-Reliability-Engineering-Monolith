@@ -90,3 +90,15 @@ Most individual runs use 128 to 512 shots, with one 1024-shot GHZ run, one 4096-
 ## Local Artifacts
 
 Raw JSON outputs and generated PDFs remain on the local workstation and are intentionally ignored by Git. This keeps the public repository clean while preserving forensic records locally.
+
+## Adaptive Validation Readiness
+
+The repository now includes a second-stage orchestration layer for the next IBM backend campaign:
+
+- `examples/accepted_vs_rejected.py`: runs session-style or fallback batch jobs and compares all, accepted, and rejected quality groups. It supports an explicit `--accept-threshold` so the study can produce a meaningful rejected cohort when continuity gates alone pass all batches.
+- `examples/delay_ramp.py`: runs GHZ jobs with configurable idle delays to detect degradation in returned target-state populations.
+- `examples/readout_mitigation_repeat.py`: repeats raw-vs-basic-readout-mitigation comparisons. Without `--real`, it prints a dry-run quota plan and does not submit jobs.
+- `examples/adaptive_backend_selector.py`: probes candidate backends, scores each backend using GHZ population, `q_conf`, latency, and error risk, then commits one selected workload to the best candidate.
+- `examples/efficiency_report.py`: summarizes shots per accepted artifact and mean accepted GHZ from the sanitized validation vault.
+
+The real backend command list is maintained in `docs/adaptive_validation_plan.md`. These scripts are prepared for multiple real backend tests, but they are not executed automatically because they spend IBM Quantum runtime and may wait in a public queue.

@@ -17,6 +17,7 @@ from examples.ibm_bridge import (
     process_counts,
     require_qiskit_core,
     require_runtime,
+    run_real_hardware_once,
     select_real_backend,
 )
 
@@ -77,38 +78,88 @@ def run_real_session_batch_loop(
     isa_circuit = pass_manager.run(build_measured_ghz_circuit())
     records = []
     started = time.perf_counter()
-    with Session(backend=backend) as session:
-        sampler = sampler_cls(mode=session)
-        session_id = session.session_id
-        for batch in range(1, batches + 1):
-            batch_start = time.perf_counter()
-            job = sampler.run([isa_circuit], shots=shots)
-            job_id = job.job_id() if hasattr(job, "job_id") else "unknown"
-            print(f"[AEGIS SESSION] batch={batch}/{batches} job={job_id} shots={shots}", flush=True)
-            result = job.result()
-            elapsed = time.perf_counter() - batch_start
-            counts = extract_sampler_counts(result)
-            payload = process_counts(
-                counts,
-                shots=shots,
-                seed=seed + batch,
-                backend_name=backend.name,
-                elapsed_seconds=elapsed,
-                source=f"ibm_real_session_batch_{batch}",
-            )
-            records.append({"batch": batch, "job_id": job_id, **payload})
-            print(
-                f"[AEGIS SESSION] batch={batch} GHZ={payload['ghz_population']:.4f} "
-                f"q_conf={payload['q_conf']:.4f} gate={payload['continuity_gate_passed']}",
-                flush=True,
-            )
-    return summarize_records(
-        source="ibm_real_session_batch_loop",
-        backend=backend.name,
-        session_id=session_id,
+    try:
+        with Session(backend=backend) as session:
+            sampler = sampler_cls(mode=session)
+            session_id = session.session_id
+            for batch in range(1, batches + 1):
+                batch_start = time.perf_counter()
+                job = sampler.run([isa_circuit], shots=shots)
+                job_id = job.job_id() if hasattr(job, "job_id") else "unknown"
+                print(f"[AEGIS SESSION] batch={batch}/{batches} job={job_id} shots={shots}", flush=True)
+                result = job.result()
+                elapsed = time.perf_counter() - batch_start
+                counts = extract_sampler_counts(result)
+                payload = process_counts(
+                    counts,
+                    shots=shots,
+                    seed=seed + batch,
+                    backend_name=backend.name,
+                    elapsed_seconds=elapsed,
+                    source=f"ibm_real_session_batch_{batch}",
+                )
+                records.append({"batch": batch, "job_id": job_id, **payload})
+                print(
+                    f"[AEGIS SESSION] batch={batch} GHZ={payload['ghz_population']:.4f} "
+                    f"q_conf={payload['q_conf']:.4f} gate={payload['continuity_gate_passed']}",
+                    flush=True,
+                )
+        return summarize_records(
+            source="ibm_real_session_batch_loop",
+            backend=backend.name,
+            session_id=session_id,
+            records=records,
+            elapsed_seconds=time.perf_counter() - started,
+        )
+    except Exception as exc:
+        print(
+            "[AEGIS SESSION FALLBACK] Runtime Session unavailable; "
+            f"falling back to normal IBM jobs. reason={exc}",
+            flush=True,
+        )
+        return run_real_job_batch_loop(
+            backend_name=backend.name,
+            batches=batches,
+            shots=shots,
+            seed=seed,
+            channel=channel,
+            fallback_reason=str(exc),
+        )
+
+
+def run_real_job_batch_loop(
+    backend_name: str,
+    batches: int,
+    shots: int,
+    seed: int,
+    channel: str,
+    fallback_reason: str = "",
+) -> dict[str, object]:
+    records = []
+    started = time.perf_counter()
+    for batch in range(1, batches + 1):
+        payload = run_real_hardware_once(
+            shots=shots,
+            seed=seed + batch,
+            channel=channel,
+            backend_name=backend_name,
+        )
+        records.append({"batch": batch, **payload})
+        print(
+            f"[AEGIS JOB LOOP] batch={batch} GHZ={payload['ghz_population']:.4f} "
+            f"q_conf={payload['q_conf']:.4f} gate={payload['continuity_gate_passed']}",
+            flush=True,
+        )
+    summary = summarize_records(
+        source="ibm_real_job_batch_loop",
+        backend=backend_name,
+        session_id="session_unavailable_job_fallback",
         records=records,
         elapsed_seconds=time.perf_counter() - started,
     )
+    if fallback_reason:
+        summary["session_fallback_reason"] = fallback_reason
+    return summary
 
 
 def summarize_records(source: str, backend: str, session_id: str, records: list[dict[str, Any]], elapsed_seconds: float) -> dict[str, object]:

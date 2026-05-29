@@ -221,6 +221,8 @@ If Qiskit is not installed, install the optional integration packages in a separ
 - `docs/validation/baseline_comparison.json`: raw-vs-governed-vs-mitigated comparison generated from sanitized artifacts.
 - `docs/validation/raw_counts_sanitized/`: sanitized IBM result artifacts. These include count histograms and derived metrics, but exclude tokens, account identifiers, and local paths.
 - `docs/validation/threshold_freeze.json`: frozen public validation thresholds used to avoid post-hoc tuning accusations.
+- `docs/validation/efficiency_summary.json`: resource-efficiency rollup over sanitized validation artifacts.
+- `docs/adaptive_validation_plan.md`: current implementation checklist and ready-to-run IBM backend validation commands.
 - `schemas/`: lightweight schema descriptors for validation artifacts, `.QOM` records, and threshold-freeze files.
 - `circuits/`: exact circuit specifications for GHZ, phase setpoint, VQE-style toy H2, and depth-stress workloads.
 - `.github/FUNDING.yml`: external support link configuration.
@@ -229,6 +231,11 @@ If Qiskit is not installed, install the optional integration packages in a separ
 - `examples/build_validation_artifacts.py`: builds sanitized validation artifacts from local IBM result files.
 - `examples/baseline_comparator.py`: summarizes raw GHZ, AEGIS-governed GHZ, readout mitigation uplift, and setpoint pass-rate metrics.
 - `examples/ibm_backend_discovery.py`: lists accessible IBM Quantum backends without submitting jobs.
+- `examples/accepted_vs_rejected.py`: compares accepted, rejected, and all returned batch quality.
+- `examples/delay_ramp.py`: runs a configurable idle-delay GHZ ramp to observe degradation detection.
+- `examples/readout_mitigation_repeat.py`: repeats raw-vs-basic-readout-mitigation comparisons.
+- `examples/adaptive_backend_selector.py`: probes candidate IBM backends and commits to the highest AEGIS score.
+- `examples/efficiency_report.py`: produces resource-efficiency summaries from the sanitized validation vault.
 - `tests/test_kernel.py`: pytest-compatible regression suite for crypto sealing, holdover aborts, and wrapped-delta phase continuity.
 - `tests/test_validation_artifacts.py`: validates Wilson confidence intervals, threshold-freeze fields, sanitized manifest hashes, and `.QOM` artifact structure.
 - `requirements-dev.txt`: local test-runner dependency file.
@@ -331,7 +338,9 @@ Session-style batch loop, real hardware:
 
 `python examples/session_batch_loop.py --real --backend ibm_marrakesh --batches 3 --shots 256 --output ibm_session_batch_loop.json`
 
-The session-style loop is the current near-real-time bridge pattern: it does not control the QPU during a circuit, but it keeps runtime resources warm and runs AEGIS immediately after each returned batch.
+The session-style loop is the current near-real-time bridge pattern: it does not control the QPU during a circuit, but it keeps runtime resources warm and runs AEGIS immediately after each returned batch. If the account or backend does not allow a Runtime Session, the script falls back to normal IBM jobs and records the fallback reason in the output JSON.
+
+Ready-to-run real backend validation commands are maintained in [`docs/adaptive_validation_plan.md`](docs/adaptive_validation_plan.md). Those commands spend IBM Quantum runtime and should be executed deliberately.
 
 ## Algorithmic Grounding
 

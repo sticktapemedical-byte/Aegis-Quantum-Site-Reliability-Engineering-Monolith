@@ -43,4 +43,5 @@ This roadmap separates implemented software from simulation models, future hardw
 
 ## Naming Guidance
 
-For technical review, use **site reliability control plane** or **simulation framework for probabilistic telemetry**. Avoid presenting the project as a physical “Quantum OS” unless explicitly discussing long-term vision or historical branding.
+For technical review, use **site reliability control plane** or **simulation framework for probabilistic telemetry**. Avoid presenting the project as a physical "Quantum OS" unless explicitly discussing long-term vision or historical branding.
+
