@@ -6,6 +6,9 @@ __pycache__/
 .venv/
 venv/
 env/
+.env
+.env.*
+!.env.example
 
 monitor_snapshots/
 Downloads/
@@ -18,4 +21,5 @@ aegis_os_reviewer_test.json
 reviewer_results.json
 simulation_results.generated.json
 aegis_kernel_results.json
-
+ibm_bridge_result.json
+ibm_bridge_*_result.json

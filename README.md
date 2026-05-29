@@ -162,10 +162,12 @@ If Qiskit is not installed, install the optional integration packages in a separ
 ## Repository File Map
 
 - `docs/architecture.svg`: simplified architecture diagram for reviewers.
+- `docs/ibm_quantum_setup.md`: optional IBM Quantum bridge setup and operational cautions.
 - `docs/runtime_boundaries.md`: detailed simulated failure-boundary rules.
 - `docs/sample_reviewer_output.json`: compact example of reviewer-mode output fields.
 - `.github/FUNDING.yml`: external support link configuration.
 - `examples/qiskit_bridge.py`: optional Qiskit Aer bridge that maps noisy GHZ circuit counts into AEGIS telemetry inputs.
+- `examples/ibm_bridge.py`: optional IBM Quantum Runtime bridge with fake-backend smoke testing and explicit real-hardware mode.
 - `tests/test_kernel.py`: pytest-compatible regression suite for crypto sealing, holdover aborts, and wrapped-delta phase continuity.
 - `requirements-dev.txt`: local test-runner dependency file.
 - `requirements-qiskit.txt`: optional Qiskit bridge dependency file.
@@ -244,6 +246,20 @@ When the live monitor is running, the Qiskit bridge is also exposed through loca
 - `GET /api/qiskit/latest`: returns the newest bridge or imported bridge artifact.
 - `GET /api/qiskit/export`: returns the current bridge artifact for dashboard download.
 - `POST /api/qiskit/import`: accepts a prior bridge JSON payload, stores it as `monitor_snapshots/qiskit_import_*.json`, and loads it into the monitor.
+
+## IBM Quantum Bridge
+
+`examples/ibm_bridge.py` is an optional bridge for IBM Quantum Runtime. It defaults to a local fake IBM backend so reviewers can validate the mapping without waiting in a cloud queue. Real hardware execution is explicit with `--real`.
+
+Setup and operational cautions are documented in `docs/ibm_quantum_setup.md`.
+
+Local fake-backend smoke test:
+
+`python examples/ibm_bridge.py --shots 256 --output ibm_bridge_fake_result.json`
+
+Real hardware, when credentials are configured locally:
+
+`python examples/ibm_bridge.py --real --shots 1024 --output ibm_bridge_result.json`
 
 ## Algorithmic Grounding
 
