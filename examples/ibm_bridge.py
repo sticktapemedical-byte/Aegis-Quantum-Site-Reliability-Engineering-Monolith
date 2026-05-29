@@ -101,16 +101,21 @@ def run_real_hardware_once(
 ) -> dict[str, object]:
     _, sampler_cls, generate_preset_pass_manager = require_runtime()
     _, backend = select_real_backend(channel=channel, backend_name=backend_name)
+    print(f"[AEGIS HARDWARE HANDSHAKE] Connected to real IBM QPU: {backend.name}", flush=True)
     circuit = build_measured_ghz_circuit()
     pass_manager = generate_preset_pass_manager(optimization_level=1, backend=backend)
     isa_circuit = pass_manager.run(circuit)
     sampler = sampler_cls(mode=backend)
     started = time.perf_counter()
     job = sampler.run([isa_circuit], shots=shots)
+    job_id = job.job_id() if hasattr(job, "job_id") else "unknown"
+    print(f"[AEGIS HARDWARE QUEUE] Submitted job {job_id} with {shots} shots. Waiting for IBM result...", flush=True)
     result = job.result()
     elapsed = time.perf_counter() - started
     counts = extract_sampler_counts(result)
-    return process_counts(counts, shots=shots, seed=seed, backend_name=backend.name, elapsed_seconds=elapsed, source="ibm_real_hardware")
+    payload = process_counts(counts, shots=shots, seed=seed, backend_name=backend.name, elapsed_seconds=elapsed, source="ibm_real_hardware")
+    payload["job_id"] = job_id
+    return payload
 
 
 def run_fake_backend_once(shots: int = 1024, seed: int = 2026) -> dict[str, object]:
