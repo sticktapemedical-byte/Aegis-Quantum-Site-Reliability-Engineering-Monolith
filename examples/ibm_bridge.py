@@ -42,12 +42,14 @@ def require_runtime():
     return QiskitRuntimeService, Sampler, generate_preset_pass_manager
 
 
-def build_measured_ghz_circuit() -> Any:
+def build_measured_ghz_circuit(delay_ms: float = 0.0) -> Any:
     classical_register, quantum_circuit, quantum_register, _ = require_qiskit_core()
     qreg = quantum_register(4, "q")
     creg = classical_register(4, "meas")
     circuit = quantum_circuit(qreg, creg)
     circuit.h(qreg[0])
+    if delay_ms > 0:
+        circuit.delay(delay_ms, qreg, unit="ms")
     circuit.cx(qreg[0], qreg[1])
     circuit.cx(qreg[1], qreg[2])
     circuit.cx(qreg[2], qreg[3])
@@ -98,11 +100,12 @@ def run_real_hardware_once(
     seed: int = 2026,
     channel: str = "ibm_quantum_platform",
     backend_name: str | None = None,
+    delay_ms: float = 0.0,
 ) -> dict[str, object]:
     _, sampler_cls, generate_preset_pass_manager = require_runtime()
     _, backend = select_real_backend(channel=channel, backend_name=backend_name)
     print(f"[AEGIS HARDWARE HANDSHAKE] Connected to real IBM QPU: {backend.name}", flush=True)
-    circuit = build_measured_ghz_circuit()
+    circuit = build_measured_ghz_circuit(delay_ms=delay_ms)
     pass_manager = generate_preset_pass_manager(optimization_level=1, backend=backend)
     isa_circuit = pass_manager.run(circuit)
     sampler = sampler_cls(mode=backend)
@@ -113,12 +116,20 @@ def run_real_hardware_once(
     result = job.result()
     elapsed = time.perf_counter() - started
     counts = extract_sampler_counts(result)
-    payload = process_counts(counts, shots=shots, seed=seed, backend_name=backend.name, elapsed_seconds=elapsed, source="ibm_real_hardware")
+    payload = process_counts(
+        counts,
+        shots=shots,
+        seed=seed,
+        backend_name=backend.name,
+        elapsed_seconds=elapsed,
+        source="ibm_real_hardware",
+        delay_ms=delay_ms,
+    )
     payload["job_id"] = job_id
     return payload
 
 
-def run_fake_backend_once(shots: int = 1024, seed: int = 2026) -> dict[str, object]:
+def run_fake_backend_once(shots: int = 1024, seed: int = 2026, delay_ms: float = 0.0) -> dict[str, object]:
     _, _, _, transpile = require_qiskit_core()
     try:
         from qiskit_aer import AerSimulator
@@ -127,12 +138,12 @@ def run_fake_backend_once(shots: int = 1024, seed: int = 2026) -> dict[str, obje
         raise SystemExit("Fake backend path requires qiskit-aer and qiskit-ibm-runtime.") from exc
     fake_backend = FakeOsaka()
     simulator = AerSimulator.from_backend(fake_backend)
-    circuit = transpile(build_measured_ghz_circuit(), simulator, seed_transpiler=seed)
+    circuit = transpile(build_measured_ghz_circuit(delay_ms=delay_ms), simulator, seed_transpiler=seed)
     started = time.perf_counter()
     result = simulator.run(circuit, shots=shots, seed_simulator=seed).result()
     elapsed = time.perf_counter() - started
     counts = dict(result.get_counts())
-    return process_counts(counts, shots=shots, seed=seed, backend_name=fake_backend.name, elapsed_seconds=elapsed, source="ibm_fake_backend")
+    return process_counts(counts, shots=shots, seed=seed, backend_name=fake_backend.name, elapsed_seconds=elapsed, source="ibm_fake_backend", delay_ms=delay_ms)
 
 
 def process_counts(
@@ -142,6 +153,7 @@ def process_counts(
     backend_name: str,
     elapsed_seconds: float,
     source: str,
+    delay_ms: float = 0.0,
 ) -> dict[str, object]:
     rng = random.Random(seed)
     good_counts = int(counts.get("0000", 0)) + int(counts.get("1111", 0))
@@ -165,6 +177,7 @@ def process_counts(
         "source": source,
         "backend": backend_name,
         "shots": shots,
+        "delay_ms": delay_ms,
         "counts": counts,
         "good_counts_0000_1111": good_counts,
         "total_counts": total_counts,
@@ -188,6 +201,7 @@ def main() -> None:
     parser.add_argument("--backend", default=None, help="Specific IBM backend name. Defaults to least busy real backend.")
     parser.add_argument("--channel", default=os.environ.get("IBM_QUANTUM_CHANNEL", "ibm_quantum_platform"))
     parser.add_argument("--shots", type=int, default=1024)
+    parser.add_argument("--delay-ms", type=float, default=0.0, help="Optional GHZ idle delay after H and before CX cascade.")
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--output", type=Path, default=Path("ibm_bridge_result.json"))
     args = parser.parse_args()
@@ -197,9 +211,15 @@ def main() -> None:
         return
 
     if args.real:
-        payload = run_real_hardware_once(shots=args.shots, seed=args.seed, channel=args.channel, backend_name=args.backend)
+        payload = run_real_hardware_once(
+            shots=args.shots,
+            seed=args.seed,
+            channel=args.channel,
+            backend_name=args.backend,
+            delay_ms=args.delay_ms,
+        )
     else:
-        payload = run_fake_backend_once(shots=args.shots, seed=args.seed)
+        payload = run_fake_backend_once(shots=args.shots, seed=args.seed, delay_ms=args.delay_ms)
     args.output.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     print(json.dumps(payload, indent=2))
     print(f"wrote {args.output}")

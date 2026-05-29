@@ -44,6 +44,10 @@ Optional backend pin:
 
 `python examples/ibm_bridge.py --real --backend ibm_brisbane --shots 1024`
 
+Optional idle-delay stress test:
+
+`python examples/ibm_bridge.py --real --backend ibm_marrakesh --shots 128 --delay-ms 1 --output ibm_marrakesh_128_delay.json`
+
 If no backend is specified, the bridge requests the least busy operational non-simulator backend with at least four qubits.
 
 ## What To Watch

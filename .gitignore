@@ -23,3 +23,4 @@ simulation_results.generated.json
 aegis_kernel_results.json
 ibm_bridge_result.json
 ibm_bridge_*_result.json
+ibm_*.json
